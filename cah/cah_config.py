@@ -76,10 +76,11 @@ class Card:
         self.image = image
         textImage.close()
 
-        image.paste(
-            collection,
-            (padding, image.height - collection.height - padding)
-        )
+        if collection:
+            image.paste(
+                collection,
+                (padding, image.height - collection.height - padding)
+            )
 
         return image
 
@@ -171,25 +172,29 @@ class Group:
         """
         Render and save all of the cards in this group
         """
-        collectionImage = Image.open(self.collection)
+        if self.collection:
+            collectionImage = Image.open(self.collection)
 
-        w, h = collectionImage.size
+            w, h = collectionImage.size
 
-        nw = round(textW * self.collection_scale)
+            nw = round(textW * self.collection_scale)
 
-        asp = nw / w
-        nh = round(asp * h)
+            asp = nw / w
+            nh = round(asp * h)
 
-        col = collectionImage.resize((nw, nh))
-        collectionImage.close()
-        collectionImage = None
+            col = collectionImage.resize((nw, nh))
+            collectionImage.close()
+            collectionImage = None
+        else:
+            col = None
 
         for i, card in enumerate(self.items):
             card.render(xy, textW, col, font)
             card.save(out % ("black" if self.cardType == BLACK else "white", i))
             card.close()
 
-        col.close()
+        if self.collection:
+            col.close()
 
     def __repr__(self):
         return "<Group(cardType={}, collection='{}', items={})>".format(
@@ -234,7 +239,7 @@ class Config:
 
 class GroupSchema(Schema):
     items = fields.List(fields.String())
-    collection = fields.String()
+    collection = fields.String(allow_none=True)
     collection_scale = fields.Float()
 
     def __init__(self, cardType: int, **kwargs):
@@ -246,7 +251,7 @@ class GroupSchema(Schema):
         return {
             "items": data.get("default"),
             "collection": data.get("collection"),
-            "collection_scale": data.get("collection_scale")
+            "collection_scale": data.get("collection_scale", 1)
         }
 
     @post_dump
@@ -281,9 +286,9 @@ class GroupSchema(Schema):
 class ConfigSchema(Schema):
     black = fields.Nested(GroupSchema(BLACK))
     white = fields.Nested(GroupSchema(WHITE))
-    out = fields.String(missing="out/%s/%d.png")
-    font = fields.String(required=True)
-    dpi = fields.Integer(missing=160)
+    out = fields.String()
+    font = fields.String()
+    dpi = fields.Integer()
 
     @pre_load
     def setupConfig(self, data: dict, **kwargs):
@@ -291,9 +296,9 @@ class ConfigSchema(Schema):
         return {
             "black": data.get("black"),
             "white": data.get("white"),
-            "out": default.get("out"),
-            "font": default.get("font"),
-            "dpi": default.get("dpi")
+            "out": default.get("out", "out/%s/%d.png"),
+            "font": default.get("font", "Helvetica_Neue_75.otf"),
+            "dpi": default.get("dpi", 160)
         }
 
     @post_load
