@@ -11,17 +11,20 @@ import re
 BLACK = 0
 WHITE = 1
 
+# These dimensions are in inches
 DIMENSIONS = (3, 4)
 TEXT_WIDTH = 2.5
 FONT_SIZE = 0.25
 
 
-def load(f: str):
-    conf = config.ConfigParser()
+def process(f: str):
+    """
+    Process a config file, and create all of the card faces for it
+    """
     with open(f) as fp:
-        conf.load(fp)
+        conf = config.ConfigParser.load(fp)
     scheme = ConfigSchema()
-    out = scheme.load(conf.data)
+    out = scheme.load(conf)
     out.renderAndSave()
 
 
@@ -35,6 +38,11 @@ class Card:
         self.image = None
 
     def save(self, out: str):
+        """
+        Save the image
+
+        render should be called first
+        """
         if self.image:
             if not os.path.exists(os.path.dirname(out)):
                 os.makedirs(os.path.dirname(out))
@@ -43,11 +51,17 @@ class Card:
                 print("wrote %s" % out)
 
     def close(self):
+        """
+        Close the image
+        """
         if self.image:
             self.image.close()
             self.image = None
 
     def render(self, xy: (int, int), textW: int, collection: Image, font: ImageFont.FreeTypeFont) -> Image:
+        """
+        render the card
+        """
 
         image = Image.new(
             "RGB", xy, self.background
@@ -70,10 +84,9 @@ class Card:
         return image
 
     def renderText(self, font: ImageFont.FreeTypeFont, width: int = 0) -> Image:
-        # Convert raw text into list of lines
-
-        # This soup
-        # tastes like _blank_.
+        """
+        Render the text of the card
+        """
         lines = list()
 
         # split the words that are too long
@@ -97,6 +110,9 @@ class Card:
         return im
 
     def renderLine(self, raw: str, image: Image, y: int, font: ImageFont.FreeTypeFont) -> ImageDraw:
+        """
+        Render a single line
+        """
         # Get the number of blanks
         blanks = raw.count("_blank_")
         no_line = raw.replace("_blank_", "")
@@ -149,28 +165,24 @@ class Group:
                 continue
             self.items.append(Card(item, cardType))
         self.cardType = cardType
-        self.collectionImage = None
         self.collection_scale = collection_scale
 
-    def loadCollection(self) -> Image:
-        self.collectionImage = Image.open(self.collection)
-        return self.collectionImage
-
     def renderAndSave(self, xy: (int, int), textW: int, font: ImageFont.FreeTypeFont, out: str):
+        """
+        Render and save all of the cards in this group
+        """
+        collectionImage = Image.open(self.collection)
 
-        if not self.collectionImage:
-            self.loadCollection()
-
-        w, h = self.collectionImage.size
+        w, h = collectionImage.size
 
         nw = round(textW * self.collection_scale)
 
         asp = nw / w
         nh = round(asp * h)
 
-        col = self.collectionImage.resize((nw, nh))
-        self.collectionImage.close()
-        self.collectionImage = None
+        col = collectionImage.resize((nw, nh))
+        collectionImage.close()
+        collectionImage = None
 
         for i, card in enumerate(self.items):
             card.render(xy, textW, col, font)
@@ -195,6 +207,9 @@ class Config:
         self.dpi = dpi
 
     def renderAndSave(self, dpi: float = 160):
+        """
+        Render and Save all black and white cards
+        """
         xy = tuple(round(i * dpi) for i in DIMENSIONS)
         textW = round(TEXT_WIDTH * dpi)
 
@@ -208,6 +223,13 @@ class Config:
             self.black,
             self.white
         )
+
+
+########################
+#
+# Schemas
+#
+########################
 
 
 class GroupSchema(Schema):

@@ -1,41 +1,62 @@
 import re
-import collections
 
-class ConfigParser(collections.MutableMapping):
+
+class ConfigParser():
+    VALUE_REGEX = r"([^\s;](?:[^;\\=]*?(?:\\;|\\=|\\n)?)+)"
+
     def __init__(self):
         self.content = ""
-        self.data = dict()
 
-    def load(self, f):
-        self.loads(f.read())
+    @classmethod
+    def load(cls, f) -> dict:
+        """
+        Load a file object
+        """
+        return cls.loads(f.read())
 
-    def loads(self, content: str):
-        self.data = dict(default=dict(default=list()))
-        
+    @classmethod
+    def loads(cls, content: str) -> dict:
+        """
+        Load a string config
+        """
+        data = dict(default=dict(default=list()))
+
         currentGroup = "default"
+        def unescape(s: str):
+            if not s:
+                return
+            return s.replace(r"\;", ";").replace(r"\=", "=")
+
 
         for line in content.splitlines():
             line = line.strip()
-            if line.startswith('['):
-                currentGroup = next(re.finditer(r"\[\s*(.*?)\s*\]", line)).group(1)
-                self.data[currentGroup] = dict(default=list())
-            else:
+            try:
+                # Get the group
+                currentGroup = unescape(next(re.finditer(r"\[\s*{v}\s*\]".format(v=cls.VALUE_REGEX), line)).group(1)).lower()
+                data[currentGroup] = dict(default=list())
+            except StopIteration:
                 # Could be default list, or named value
                 try:
-                    value = next(re.finditer(r"(.+?)\s*(?:=\s*(.+?))?\s*$", line)).groups()
+                    regex = r"{v}(?:\s*=\s*{v})?\s*(?=$|;)".format(v=cls.VALUE_REGEX)
+                    value = list(map(unescape, next(re.finditer(regex, line)).groups()))
                     if value[1]:
-                        self.data[currentGroup][value[0]] = value[1]
+                        data[currentGroup][value[0].lower()] = value[1]
                     else:
-                        self.data[currentGroup]['default'].append(value[0])
+                        data[currentGroup]['default'].append(value[0])
                 except StopIteration:
                     pass
-    
-    def dumps(self) -> str:
+        return data
+
+    @classmethod
+    def dumps(cls, data: dict) -> str:
+        """
+        Dump to a string
+        """
         def dumpGroup(value, group=None) -> str:
             out = ""
             if group:
                 out = "[%s]\n" % group
-            
+
             for k, v in value:
                 if k == 'default':
                     continue
@@ -45,31 +66,18 @@ class ConfigParser(collections.MutableMapping):
             out += '\n'
             return out
 
-        output = dumpGroup(self.data['default'])
+        output = dumpGroup(data['default'])
 
-        for k, v in self.data:
+        for k, v in data:
             if k == 'default':
                 continue
             output += dumpGroup(v, k)
         return output
-    
-    def dump(self, f):
-        f.write(self.dumps())
 
-    def __getitem__(self, key):
-        return self.data[key]
-    
-    def __setitem__(self, key, value):
-        self.data[key] = value
-    
-    def __delitem__(self, key):
-        del self.data[key]
-    
-    def __iter__(self):
-        return iter(self.data)
-    
-    def __len__(self):
-        return len(self.data)
-    
-    def __repr__(self):
-        return str(self.data)
+    @classmethod
+    def dump(cls, f, data: dict):
+        """
+        Dump to a file
+        """
+        f.write(cls.dumps(data))
+
