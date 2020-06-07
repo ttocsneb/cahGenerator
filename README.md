@@ -51,7 +51,7 @@ collection_scale = 0.5
 The moment Jeff walked into the bar
 ```
 
-You can see `food.ini` for a better example of what the config file should look
+You can see `ama.ini` for a better example of what the config file should look
 like
 
 ### Running

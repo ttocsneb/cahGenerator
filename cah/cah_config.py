@@ -27,7 +27,7 @@ def process(f: str):
         conf = config.ConfigParser.load(fp)
     scheme = ConfigSchema()
     out = scheme.load(conf)
-    out.renderAndSave()
+    out.renderAndSave(relative=os.path.dirname(f))
 
 
 class Card:
@@ -69,14 +69,9 @@ class Card:
             "RGB", xy, self.background
         )
 
-        textImage = self.renderText(font, textW)
+        textImage = self.renderText(font, textW, xy[0])
 
         padding = (xy[0] - textImage.size[0]) // 2
-
-        image.paste(textImage, (padding, padding))
-
-        self.image = image
-        textImage.close()
 
         if collection:
             image.paste(
@@ -89,9 +84,14 @@ class Card:
             image.paste(pickIm, (image.width - padding - pickIm.width, image.height - padding - pickIm.height))
             pickIm.close()
 
+        image.paste(textImage, (padding, 0))
+        textImage.close()
+
+        self.image = image
+
         return image
 
-    def renderText(self, font: ImageFont.FreeTypeFont, width: int = 0) -> Image:
+    def renderText(self, font: ImageFont.FreeTypeFont, width: int = 0, maxwidth: int = 0) -> Image:
         """
         Render the text of the card
         """
@@ -99,7 +99,8 @@ class Card:
 
         # split the words that are too long
         for match in re.finditer(r"(?:\\n|\s*)(.*?(?=\\n)|.{0,20}(?=\s|$))", self.raw):
-            lines.append(match[1])
+            if match[1]:
+                lines.append(match[1])
 
         ws, hs = zip(*[font.getsize(l) for l in lines])
 
@@ -108,16 +109,21 @@ class Card:
         if not width:
             width = max(ws)
 
-        im = Image.new("RGB", (width, int(sum(hs) * mult)), self.background)
+        padding = (maxwidth - width) // 2
 
-        y = 0
-        for h, l in zip(hs, lines):
-            self.renderLine(l, im, y, font)
-            y += int(h * mult)
+
+        h = round(sum(hs) / len(hs))
+        height = round(h * (len(hs) - 1) * mult + hs[-1])
+        im = Image.new("RGB", (width, height + padding), self.background)
+
+        y = padding
+        for l in lines:
+            self.renderLine(l, im, y, h, font)
+            y += round(h * mult)
 
         return im
 
-    def renderLine(self, raw: str, image: Image, y: int, font: ImageFont.FreeTypeFont) -> ImageDraw:
+    def renderLine(self, raw: str, image: Image, y: int, height: int, font: ImageFont.FreeTypeFont) -> ImageDraw:
         """
         Render a single line
         """
@@ -126,8 +132,22 @@ class Card:
         no_line = raw.replace("_blank_", "")
         ascent, descent = font.getmetrics()
         w, h = font.getsize(no_line)
+        (width, baseline), (offset_x, offset_y) = font.font.getsize(no_line)
+
+        if height < h:
+            line = ascent
+        else:
+            line = height - descent / 2
+            y = y - height + h
+
+
+        ascent, descent = font.getmetrics()
 
         draw = ImageDraw.Draw(image)
+
+        #  draw.line((0, y, w, y), fill=(255, 0, 0))
+        #  draw.line((0, y + height, w, y + height), fill=(0, 255, 0))
+        #  draw.line((0, y + h, w, y + h), fill=(0, 0, 255))
 
         if blanks > 0:
             # Get the size of each blank.
@@ -147,8 +167,8 @@ class Card:
                 if blanks > 0:
                     # Draw the line
                     draw.line((
-                        (x + 5, y + h),
-                        (x + blank_size - 5, y + h)
+                        (x + 5, y + line),
+                        (x + blank_size - 5, y + line)
                     ), fill=self.color, width=2)
 
                     x += blank_size
@@ -242,12 +262,14 @@ class Group:
         self.cardType = cardType
         self.collection_scale = collection_scale
 
-    def renderAndSave(self, xy: (int, int), textW: int, font: ImageFont.FreeTypeFont, out: str):
+    def renderAndSave(self, xy: (int, int), textW: int, font: ImageFont.FreeTypeFont, out: str, relative=""):
         """
         Render and save all of the cards in this group
         """
+        collection = os.path.join(relative, self.collection) if not os.path.isabs(self.collection) else self.collection
+
         if self.collection:
-            collectionImage = Image.open(self.collection)
+            collectionImage = Image.open(collection)
 
             w, h = collectionImage.size
 
@@ -285,17 +307,20 @@ class Config:
         self.font = font
         self.dpi = dpi
 
-    def renderAndSave(self, dpi: float = 160):
+    def renderAndSave(self, dpi: float = 160, relative: str=""):
         """
         Render and Save all black and white cards
         """
         xy = tuple(round(i * dpi) for i in DIMENSIONS)
         textW = round(TEXT_WIDTH * dpi)
 
-        font = ImageFont.FreeTypeFont(self.font, round(FONT_SIZE * dpi))
+        relfont = os.path.join(relative, self.font) if not os.path.isabs(self.font) else self.font
+        rel = os.path.join(relative, self.out) if not os.path.isabs(self.out) else self.out
 
-        self.black.renderAndSave(xy, textW, font, self.out)
-        self.white.renderAndSave(xy, textW, font, self.out)
+        font = ImageFont.FreeTypeFont(relfont, round(FONT_SIZE * dpi))
+
+        self.black.renderAndSave(xy, textW, font, rel, relative=relative)
+        self.white.renderAndSave(xy, textW, font, rel, relative=relative)
 
     def __repr__(self):
         return "<Config(black={}, white={})>".format(

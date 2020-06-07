@@ -1,3 +1,8 @@
-food/*
+cards/out
+cards/*.ini
+!cards/ama.ini
+cards/collections/**
+!cards/collections/ama*
+!cards/collections/orig*
 
 __pycache__
