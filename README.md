@@ -62,17 +62,3 @@ parameter.
 ```bash
 python3 -m cah asdf.ini
 ```
-
-## TODO
-
-### Pick 2
-
-If a black card has two or more blanks, It should show in the bottom right
-corner of the card.
-
-![Pick 2 Example](https://thefictionals.com/wp-content/uploads/2014/05/images_iah-example-1.jpg)
-
-If there are 3 blanks, the message should be draw 2 and pick 3.
-
-I don't know what the message should be if there are more than 3 blanks, but if
-there were more than 3 blanks, I don't think people would like it.
