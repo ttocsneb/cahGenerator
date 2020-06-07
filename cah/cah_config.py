@@ -8,6 +8,8 @@ from . import config
 
 import re
 
+import math
+
 BLACK = 0
 WHITE = 1
 
@@ -82,6 +84,11 @@ class Card:
                 (padding, image.height - collection.height - padding)
             )
 
+        if self.cardType == BLACK and self.blanks > 1:
+            pickIm = self.renderPick(font)
+            image.paste(pickIm, (image.width - padding - pickIm.width, image.height - padding - pickIm.height))
+            pickIm.close()
+
         return image
 
     def renderText(self, font: ImageFont.FreeTypeFont, width: int = 0) -> Image:
@@ -148,6 +155,73 @@ class Card:
                     blanks -= 1
             return
         draw.text((0, y), raw, self.color, font)
+
+    def renderCircle(self, txt: str, font: ImageFont.FreeTypeFont) -> Image:
+        """
+        Render text inside a circle
+        """
+        txt = str(txt)
+
+        # Get the size of the circle
+        w, h = font.getsize(txt)
+        diam = round(math.sqrt(w ** 2 + h ** 2) * 1.25)
+
+        im = Image.new("RGB", (diam, diam), (0, 0, 0))
+        draw = ImageDraw.Draw(im)
+
+        draw.ellipse((0, 0, diam, diam), fill=(255, 255, 255))
+        draw.text((diam//2 - w//2, diam//2 - h//2), txt, fill=(0, 0, 0), font=font)
+
+        return im
+
+    def renderPick(self, font: ImageFont.FreeTypeFont) -> Image:
+        """
+        Render Pick 2, or draw 2/pick 3
+        """
+
+        # Figure out the size of the image
+        pickIm = self.renderCircle(self.blanks, font)
+        w, h = pickIm.size
+
+        pickT = "PICK "
+        pw, ph = font.getsize(pickT)
+        w += pw
+
+        if self.blanks > 2:
+            h = round(h * 1.75)
+
+            drawIm = self.renderCircle(self.blanks - 1, font)
+            drawT = "DRAW "
+            dw, dh = font.getsize(drawT)
+            h += dh
+
+            w = max(w, drawIm.width + dw)
+        else:
+            drawIm = None
+
+        im = Image.new("RGB", (w, h), (0, 0, 0))
+        draw = ImageDraw.Draw(im)
+
+        # Draw the Pick
+        nw, nh = pickIm.size
+        im.paste(pickIm, (w - nw, h - nh))
+        draw.text((w - nw - pw, h - nh // 2 - ph // 2), pickT, fill=(255, 255, 255), font=font)
+
+        if drawIm:
+            # Draw the Draw
+            nw, nh = drawIm.size
+            im.paste(drawIm, (w - nw, 0))
+            draw.text((w - nw - dw, nh // 2 - dh // 2), drawT, fill=(255, 255, 255), font=font)
+
+        # Close the temporary images
+        pickIm.close()
+        if drawIm:
+            drawIm.close()
+
+        newIm = im.resize((round(w * 0.75), round(h * 0.75)), resample=Image.LANCZOS)
+        im.close()
+
+        return newIm
 
     def __str__(self):
         return self.raw.replace("\\n", "\n")
