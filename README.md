@@ -24,17 +24,24 @@ to create new cards, specifying the location where they will be saved, what
 font to use, and what collection image to use.
 
 ```ini
-out = asdf/%s/%02d.png ; The format of the generated cards
+; The format of the generated card files
+; The parameters are:
+;   %s: either black or white
+;   %d: file number
+;   If collating:
+;     %d: number of cards
+out = out/%s/asdf-%d-%d.png ; The format of the generated cards
 font = Helvetica_Neue_75.otf ; The font to use
-dpi = 160 ; The size of the card
+dpi = 133 ; The size of the card (default: 133)
+collate = yes; whether t collate or not (default: no)
 
 [black]
 ; All black cards are stored here
 
 ; The collection image is placed at the bottom of the card to let you know
 ; Where that card came from
-collection = collections/asdf_black.png ; The image to use for the collection
-collection_scale = 0.5 ; How big should the image be
+collection = collections/asdf_black.png ; The image to use for the collection (optional)
+collection_scale = 0.5 ; How big should the image be (default: 1)
 
 ; Each card is on its own line with no = sign!
 Why am I like this?
@@ -51,7 +58,7 @@ collection_scale = 0.5
 The moment Jeff walked into the bar
 ```
 
-You can see `ama.ini` for a better example of what the config file should look
+You can see `cards/ama.ini` for a better example of what the config file should look
 like
 
 ### Running

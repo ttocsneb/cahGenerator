@@ -1,7 +1,7 @@
 import os
 
 from marshmallow import (Schema, fields, post_dump, post_load, pre_dump,
-                         pre_load, utils, validate)
+                         pre_load, utils, validate, ValidationError)
 from PIL import Image, ImageDraw, ImageFont
 
 from . import config
@@ -292,6 +292,61 @@ class Group:
         if self.collection:
             col.close()
 
+    def collate(self, dpi: float, font: ImageFont.FreeTypeFont, out: str, relative: str=""):
+        xy = tuple(round(i * dpi) for i in DIMENSIONS)
+        sheet = xy[0] * 10, xy[1] * 7
+        textW = round(TEXT_WIDTH * dpi)
+
+        collection = os.path.join(relative, self.collection) if not os.path.isabs(self.collection) else self.collection
+
+        if self.collection:
+            collectionImage = Image.open(collection)
+
+            w, h = collectionImage.size
+
+            nw = round(textW * self.collection_scale)
+
+            asp = nw / w
+            nh = round(asp * h)
+
+            colIm = collectionImage.resize((nw, nh))
+            collectionImage.close()
+            collectionImage = None
+        else:
+            colIm = None
+
+        def chunks(lst, n):
+            """Yield successive n-sized chunks from lst."""
+            for i in range(0, len(lst), n):
+                yield lst[i:i + n]
+
+        for n, chunk in enumerate(chunks(self.items, 70)):
+            # Each sheet can have at most 70 cards
+
+            im = Image.new("RGBA", sheet, (0, 0, 0, 0))
+            for i, row in enumerate(chunks(chunk, 10)):
+                y = i * xy[1]
+
+                for j, card in enumerate(row):
+                    # Render each card, and paste it onto the sheet
+                    x = j * xy[0]
+                    cardIm = card.render(xy, textW, colIm, font)
+                    im.paste(cardIm, (x, y))
+                    cardIm.close()
+
+            f = out % ("black" if self.cardType == BLACK else "white", n, len(chunk))
+            if not os.path.exists(os.path.dirname(f)):
+                os.makedirs(os.path.dirname(f))
+            with open(f, "wb") as fp:
+                im.save(fp)
+                print("saved sheet %s" % f)
+
+            im.close()
+
+        if colIm is not None:
+            colIm.close()
+
+
     def __repr__(self):
         return "<Group(cardType={}, collection='{}', items={})>".format(
             "BLACK" if self.cardType == BLACK else "WHITE",
@@ -300,27 +355,33 @@ class Group:
 
 
 class Config:
-    def __init__(self, black: Group, white: Group, out: str, font: str, dpi: int):
+    def __init__(self, black: Group, white: Group, out: str, font: str, dpi: int, collate: bool):
         self.black = black
         self.white = white
         self.out = out
         self.font = font
         self.dpi = dpi
+        self.collate = collate
 
     def renderAndSave(self, dpi: float = 160, relative: str=""):
         """
         Render and Save all black and white cards
         """
-        xy = tuple(round(i * dpi) for i in DIMENSIONS)
-        textW = round(TEXT_WIDTH * dpi)
-
         relfont = os.path.join(relative, self.font) if not os.path.isabs(self.font) else self.font
         rel = os.path.join(relative, self.out) if not os.path.isabs(self.out) else self.out
 
         font = ImageFont.FreeTypeFont(relfont, round(FONT_SIZE * dpi))
 
-        self.black.renderAndSave(xy, textW, font, rel, relative=relative)
-        self.white.renderAndSave(xy, textW, font, rel, relative=relative)
+        if not self.collate:
+            xy = tuple(round(i * dpi) for i in DIMENSIONS)
+            textW = round(TEXT_WIDTH * dpi)
+
+            self.black.renderAndSave(xy, textW, font, rel, relative=relative)
+            self.white.renderAndSave(xy, textW, font, rel, relative=relative)
+        else:
+            self.black.collate(dpi, font, rel, relative=relative)
+            self.white.collate(dpi, font, rel, relative=relative)
+
 
     def __repr__(self):
         return "<Config(black={}, white={})>".format(
@@ -382,12 +443,37 @@ class GroupSchema(Schema):
         )
 
 
+class BooleanField(fields.String):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def _validate(self, value):
+        if isinstance(value, bool):
+            return
+        super()._validate(value)
+        value = str(value).lower()
+        if value not in ["true", "false", "yes", "no"]:
+            raise ValidationError("Must be one of [true, false, yes, no]")
+
+    def _deserialize(self, value, attr, data, **kwargs):
+        if isinstance(value, bool):
+            return value
+        txt = super()._deserialize(value, attr, data, **kwargs).lower()
+
+        return txt in ["true", "yes"]
+
+    def _serialize(self, value, attr, obj, **kwargs):
+        val = "yes" if value else "no"
+        return super()._serialize(val, attr, obj, **kwargs)
+
+
 class ConfigSchema(Schema):
     black = fields.Nested(GroupSchema(BLACK))
     white = fields.Nested(GroupSchema(WHITE))
     out = fields.String()
     font = fields.String()
     dpi = fields.Integer()
+    collate = BooleanField()
 
     @pre_load
     def setupConfig(self, data: dict, **kwargs):
@@ -397,7 +483,8 @@ class ConfigSchema(Schema):
             "white": data.get("white"),
             "out": default.get("out", "out/%s/%d.png"),
             "font": default.get("font", "Helvetica_Neue_75.otf"),
-            "dpi": default.get("dpi", 160)
+            "dpi": default.get("dpi", 133),
+            "collate": default.get("collate", False)
         }
 
     @post_load
@@ -412,6 +499,7 @@ class ConfigSchema(Schema):
             "default": {
                 "out": data.get("out"),
                 "font": data.get("font"),
-                "dpi": data.get("dpi")
+                "dpi": data.get("dpi"),
+                "collate": data.get("collate")
             }
         }
